@@ -12,7 +12,7 @@ export function HeroSection() {
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[120px] pointer-events-none" />
 
-      <div className="container mx-auto px-4 grid lg:grid-cols-2 gap-12 items-center z-10">
+      <div className="container mx-auto px-4 relative z-10 pointer-events-none">
         <motion.div
           initial={{
             opacity: 0,
@@ -26,7 +26,7 @@ export function HeroSection() {
             duration: 0.8,
             ease: 'easeOut'
           }}
-          className="flex flex-col gap-8">
+          className="flex flex-col gap-8 max-w-xl py-20 pointer-events-auto">
           
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 w-fit">
             <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -41,7 +41,7 @@ export function HeroSection() {
             into visible <span className="text-emerald-400">savings.</span>
           </h1>
 
-          <p className="text-lg md:text-xl text-muted-foreground max-w-xl leading-relaxed">
+          <p className="text-lg md:text-xl text-muted-foreground leading-relaxed">
             CarbonTwin tracks your digital footprint in real-time, gamifies
             reduction with Eco-Scores, and uses an aggressive AI coach to save
             your company money and the planet.
@@ -66,7 +66,7 @@ export function HeroSection() {
             </Link>
           </div>
 
-          <div className="flex items-center gap-8 pt-4 border-t border-border/50">
+          <div className="flex items-center gap-8 md:gap-12 pt-8 border-t border-border/50 w-full">
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Cloud className="w-4 h-4 text-emerald-500" />
@@ -94,7 +94,10 @@ export function HeroSection() {
             </div>
           </div>
         </motion.div>
+      </div>
 
+      {/* Globe Background Container */}
+      <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden">
         <motion.div
           initial={{
             opacity: 0,
@@ -105,51 +108,11 @@ export function HeroSection() {
             scale: 1
           }}
           transition={{
-            duration: 1,
+            duration: 1.5,
             delay: 0.2
           }}
-          className="relative h-[500px] lg:h-[700px] w-full flex items-center justify-center">
+          className="w-full h-full max-w-6xl aspect-square flex items-center justify-center opacity-60">
           
-          {/* Decorative elements around globe */}
-          <div
-            className="absolute top-1/4 right-10 bg-card/80 backdrop-blur-md border border-border p-4 rounded-xl shadow-2xl z-20 animate-bounce"
-            style={{
-              animationDuration: '3s'
-            }}>
-            
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                <IndianRupee className="w-5 h-5 text-emerald-500" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">
-                  Cost Avoided
-                </p>
-                <p className="text-lg font-bold text-emerald-400">+₹4,250</p>
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="absolute bottom-1/4 left-10 bg-card/80 backdrop-blur-md border border-border p-4 rounded-xl shadow-2xl z-20 animate-bounce"
-            style={{
-              animationDuration: '4s',
-              animationDelay: '1s'
-            }}>
-            
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-                <Cloud className="w-5 h-5 text-blue-500" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">
-                  Carbon Saved
-                </p>
-                <p className="text-lg font-bold text-blue-400">12.4 kg</p>
-              </div>
-            </div>
-          </div>
-
           <Globe />
         </motion.div>
       </div>
