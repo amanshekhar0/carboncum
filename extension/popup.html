@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { width: 300px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0a0a0a; color: white; padding: 15px; }
+    h1 { font-size: 1.2rem; color: #10b981; margin: 0 0 10px 0; }
+    .stat { display: flex; justify-between; margin-bottom: 8px; font-size: 0.9rem; }
+    .label { color: #888; }
+    .value { font-weight: bold; }
+    button { width: 100%; background: #10b981; border: none; color: white; padding: 8px; border-radius: 5px; cursor: pointer; margin-top: 10px; font-weight: bold; }
+    button:hover { background: #059669; }
+    .footer { font-size: 0.7rem; color: #555; margin-top: 15px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>CarbonTwin</h1>
+  <div class="stat">
+    <span class="label">Eco-Score</span>
+    <span class="value" id="score">--</span>
+  </div>
+  <div class="stat">
+    <span class="label">Carbon Saved</span>
+    <span class="value" id="carbon">-- kg</span>
+  </div>
+  <div class="stat">
+    <span class="label">Rupees Saved</span>
+    <span class="value" id="rupees">₹--</span>
+  </div>
+  <button id="dashboard">Open Dashboard</button>
+  <div class="footer">Real-time Digital ESG Monitoring</div>
+  <script>
+    document.getElementById('dashboard').onclick = () => {
+      chrome.tabs.create({ url: 'http://localhost:5173/dashboard' });
+    };
+    // In a real version, we'd fetch these from local storage or API
+  </script>
+</body>
+</html>
