@@ -31,69 +31,64 @@ const getMetrics = async (req, res) => {
     let chartData = [];
 
     if (isDbConnected) {
-      // Try to fetch real data
-      if (!userId || userId === 'undefined') {
-        user = await User.findOne({ email: 'aarav@startup.io' }).lean();
-        if (!user) user = await seedDemoUser();
-        userId = user._id.toString();
-      } else {
-        user = await User.findById(userId).lean();
-        if (!user) user = await seedDemoUser();
+      user = await User.findById(userId).lean();
+      
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
       }
 
-      // ... existing chart aggregation logic ...
-      // I'll simplify the replacement to keep the logic but wrap it in safety
+      // Check if user is brand new (no logs)
+      const logCount = await ActivityLog.countDocuments({ userId });
+      if (logCount === 0) {
+        console.log(`[Dashboard] Creating Welcome Bonus for new user: ${user.name}`);
+        await ActivityLog.create({
+          userId,
+          category: 'Lifestyle',
+          actionName: 'Welcome to CarbonTwin! 🌱',
+          carbonImpact: -1.2,
+          costImpact: -15.5,
+          timestamp: new Date()
+        });
+        
+        // Give some initial points
+        await User.findByIdAndUpdate(userId, { 
+          $set: { 
+            ecoPoints: 50, 
+            ecoScore: 65,
+            totalCarbonSaved: 1.2,
+            totalRupeesSaved: 15.5
+          } 
+        });
+        
+        // Refresh user object
+        user.ecoPoints = 50;
+        user.ecoScore = 65;
+        user.totalCarbonSaved = 1.2;
+        user.totalRupeesSaved = 15.5;
+      }
+
       chartData = await generateChartDataFromDB(userId, period);
       recentActivity = await ActivityLog.find({ userId }).sort({ timestamp: -1 }).limit(10).lean();
     } else {
-      // DB DOWN: Try MockDB first
-      const MockDB = require('../services/MockDB');
-      user = MockDB.getUser(userId);
-      
-      if (!user) {
-        user = {
-          _id: 'mock_user_123',
-          name: 'Aarav Sharma (Guest)',
-          email: 'aarav@startup.io',
-          ecoScore: 78,
-          currentStreak: 5,
-          totalCarbonSaved: 124.5,
-          totalRupeesSaved: 2850
-        };
-      }
-      
-      chartData = generateFallbackChartData(period);
-      recentActivity = MockDB.getLogs(userId);
-      
-      if (recentActivity.length === 0) {
-        recentActivity = [
-          { _id: '1', category: 'Browser', actionName: 'Closed 15 Zombie Tabs', carbonImpact: -0.2, costImpact: -2.5, timestamp: new Date() },
-          { _id: '2', category: 'Hardware', actionName: 'Dark Mode Activated', carbonImpact: -0.05, costImpact: -0.8, timestamp: new Date() }
-        ];
-      }
+      return res.status(503).json({ error: 'Database disconnected' });
     }
 
     res.json({
       user: {
         id: user._id,
         name: user.name,
-        ecoScore: user.ecoScore,
-        currentStreak: user.currentStreak,
-        totalCarbonSaved: user.totalCarbonSaved,
-        totalRupeesSaved: user.totalRupeesSaved,
+        ecoScore: user.ecoScore || 0,
+        currentStreak: user.currentStreak || 0,
+        totalCarbonSaved: user.totalCarbonSaved || 0,
+        totalRupeesSaved: user.totalRupeesSaved || 0,
         avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`
       },
-      chartData: chartData.length > 0 ? chartData : generateFallbackChartData(period),
+      chartData: chartData,
       recentActivity
     });
   } catch (err) {
     console.error('[dashboardController] getMetrics error:', err);
-    // Ultimate fallback
-    res.json({
-      user: { name: 'Demo User', ecoScore: 50, currentStreak: 0, totalCarbonSaved: 0, totalRupeesSaved: 0 },
-      chartData: generateFallbackChartData('monthly'),
-      recentActivity: []
-    });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -101,14 +96,7 @@ const getLeaderboard = async (req, res) => {
   try {
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {
-      // Return empty or MockDB users if DB is down
-      const MockDB = require('../services/MockDB');
-      const mockUsers = MockDB.getAllUsers().sort((a, b) => (b.ecoScore || 0) - (a.ecoScore || 0)).slice(0, 10);
-      const leaderboard = mockUsers.map((u, i) => ({
-        id: u.id, rank: i+1, name: u.name, score: u.ecoScore, streak: u.currentStreak, 
-        carbonSaved: u.totalCarbonSaved, avatar: u.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.name}`
-      }));
-      return res.json({ data: leaderboard, fromCache: false, isMock: true });
+      return res.status(503).json({ error: 'Database disconnected' });
     }
 
     const orgId = req.query.orgId || 'default';
@@ -147,22 +135,30 @@ const seedDemo = async (req, res) => {
 const generateChartDataFromDB = async (userId, period) => {
   const mongoose = require('mongoose');
   const now = new Date();
-  let startDate;
+  let days;
   let groupFormat;
   
   switch (period) {
     case 'weekly':
-      startDate = new Date(now - 7 * 24 * 3600 * 1000);
+      days = 7;
       groupFormat = '%Y-%m-%d';
       break;
     case 'yearly':
-      startDate = new Date(now - 365 * 24 * 3600 * 1000);
+      days = 12; // months
       groupFormat = '%Y-%m';
       break;
     default:
-      startDate = new Date(now - 30 * 24 * 3600 * 1000);
+      days = 30;
       groupFormat = '%Y-%m-%d';
   }
+
+  const startDate = new Date();
+  if (period === 'yearly') {
+    startDate.setMonth(now.getMonth() - 11);
+  } else {
+    startDate.setDate(now.getDate() - (days - 1));
+  }
+  startDate.setHours(0, 0, 0, 0);
 
   const aggregation = await ActivityLog.aggregate([
     {
@@ -181,12 +177,31 @@ const generateChartDataFromDB = async (userId, period) => {
     { $sort: { _id: 1 } }
   ]);
 
-  return aggregation.map((entry) => ({
-    date: entry._id,
-    co2: parseFloat(Math.abs(entry.co2).toFixed(3)),
-    cost: parseFloat(Math.abs(entry.cost).toFixed(2)),
-    saved: entry.co2 < 0 ? parseFloat(Math.abs(entry.co2).toFixed(3)) : 0
-  }));
+  // Map aggregation to a Map for easy lookup
+  const dataMap = new Map(aggregation.map(item => [item._id, item]));
+
+  // Fill in the gaps to make the chart look full and professional
+  const fullData = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(startDate);
+    if (period === 'yearly') {
+      d.setMonth(startDate.getMonth() + i);
+    } else {
+      d.setDate(startDate.getDate() + i);
+    }
+    
+    const key = d.toISOString().split('T')[0].substring(0, groupFormat.includes('%m-%d') ? 10 : 7);
+    const entry = dataMap.get(key) || { co2: 0, cost: 0 };
+
+    fullData.push({
+      date: key,
+      co2: parseFloat(Math.abs(entry.co2).toFixed(3)),
+      cost: parseFloat(Math.abs(entry.cost).toFixed(2)),
+      saved: entry.co2 < 0 ? parseFloat(Math.abs(entry.co2).toFixed(3)) : 0
+    });
+  }
+
+  return fullData;
 };
 
 const seedDemoUser = async () => {

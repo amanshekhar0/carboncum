@@ -63,7 +63,22 @@ const UserSchema = new mongoose.Schema(
     ecoPoints: {
       type: Number,
       default: 100
-    }
+    },
+    // New Feature: Commute Scanning
+    commuteHistory: [
+      {
+        origin: String,
+        destination: String,
+        transportMode: {
+          type: String,
+          enum: ['bus', 'metro', 'train', 'unknown'],
+          default: 'unknown'
+        },
+        carbonSaved: Number,
+        pointsAwarded: Number,
+        scannedAt: { type: Date, default: Date.now }
+      }
+    ]
   },
   {
     timestamps: true // Adds createdAt, updatedAt

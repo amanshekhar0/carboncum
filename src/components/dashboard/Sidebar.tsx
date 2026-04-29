@@ -10,7 +10,8 @@ import {
   LogOut,
   Sliders,
   Sun,
-  Moon
+  Moon,
+  MapPin
 } from 'lucide-react';
 import { MOCK_USER } from '../../services/mockData';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -39,6 +40,11 @@ const navItems = [
   icon: Bot,
   label: 'AI Coach',
   path: '/dashboard/coach'
+},
+{
+  icon: MapPin,
+  label: 'Transit Scan',
+  path: '/dashboard/scan'
 },
 {
   icon: Settings,

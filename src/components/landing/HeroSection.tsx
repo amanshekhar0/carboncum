@@ -56,13 +56,14 @@ export function HeroSection() {
                 Enter Dashboard <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
             </Link>
-            <Button
-              size="lg"
-              variant="outline"
-              className="h-14 px-8 text-base border-border hover:bg-secondary">
-              
-              View Enterprise Demo
-            </Button>
+            <Link to="/enterprise">
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-14 px-8 text-base border-border hover:bg-secondary">
+                View Enterprise Demo
+              </Button>
+            </Link>
           </div>
 
           <div className="flex items-center gap-8 pt-4 border-t border-border/50">

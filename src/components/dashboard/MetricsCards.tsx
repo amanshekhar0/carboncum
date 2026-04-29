@@ -5,7 +5,7 @@ import { api } from '../../services/api';
 import { MOCK_USER } from '../../services/mockData';
 
 export function MetricsCards() {
-  const [user, setUser] = useState<any>(MOCK_USER);
+  const [user, setUser] = useState<any>({ totalCarbonSaved: 0, totalRupeesSaved: 0, ecoScore: 0, currentStreak: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -14,7 +14,7 @@ export function MetricsCards() {
         const data = await api.dashboard.getMetrics();
         if (data?.user) setUser(data.user);
       } catch (e) {
-        // Keep mock data as fallback
+        // Keep 0s
       } finally {
         setLoading(false);
       }
@@ -25,26 +25,26 @@ export function MetricsCards() {
   const cards = [
     {
       title: 'Total Carbon Saved',
-      value: `${user.totalCarbonSaved} kg`,
-      subtext: <><span className="text-emerald-400">+14%</span> from last month</>,
+      value: `${user.totalCarbonSaved || 0} kg`,
+      subtext: 'Tracking real-time impact',
       icon: <Cloud className="h-4 w-4 text-blue-400" />
     },
     {
       title: 'Total Rupees Saved',
-      value: `₹${Number(user.totalRupeesSaved).toLocaleString('en-IN')}`,
-      subtext: <><span className="text-emerald-400">+₹450</span> this week</>,
+      value: `₹${Number(user.totalRupeesSaved || 0).toLocaleString('en-IN')}`,
+      subtext: 'Money saved via efficiency',
       icon: <IndianRupee className="h-4 w-4 text-emerald-400" />
     },
     {
       title: 'Eco-Score',
-      value: `${user.ecoScore}/100`,
-      subtext: 'Top 15% in your organization',
+      value: `${user.ecoScore || 0}/100`,
+      subtext: 'Your current efficiency grade',
       icon: <Trophy className="h-4 w-4 text-yellow-400" />
     },
     {
       title: 'Current Streak',
-      value: `${user.currentStreak} Days`,
-      subtext: 'Keep it up to earn a badge!',
+      value: `${user.currentStreak || 0} Days`,
+      subtext: 'Activity consistency',
       icon: <Flame className="h-4 w-4 text-orange-400" />
     }
   ];

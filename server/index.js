@@ -23,6 +23,7 @@ mongoose.set('bufferCommands', false);
 const routes = require('./src/routes/index');
 const { connectRedis } = require('./src/services/RedisService');
 const { startNudgeCron } = require('./src/jobs/nudgeCron');
+const { startSleeper } = require('./src/jobs/idleSleeper');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -70,6 +71,10 @@ const bootstrap = async () => {
     console.log(`[Server] Frontend expected at ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
   });
 
+  // 7. Initialize Real-Time WebSockets
+  const { init } = require('./src/services/SocketService');
+  init(server);
+
   // 1. Connect MongoDB (non-fatal – server still starts without it)
   try {
     await mongoose.connect(process.env.MONGO_URI, {
@@ -82,19 +87,9 @@ const bootstrap = async () => {
     // 4. Start daily nudge cron (only if DB is connected)
     startNudgeCron();
 
-    // 5. Auto-seed demo data on first run
-    const User = require('./src/models/User');
-    const count = await User.countDocuments();
-    if (count === 0) {
-      console.log('[Server] No users found. Seeding demo data...');
-      const { seedDemo } = require('./src/controllers/dashboardController');
-      const fakeRes = {
-        json: (data) => console.log('[Seed]', JSON.stringify(data)),
-        status: () => ({ json: () => {} })
-      };
-      await seedDemo({}, fakeRes);
-    } else {
-      console.log(`[Server] ${count} users found in DB`);
+    // 6. Start Windows Auto-Sleep monitor (Digital Sustainability)
+    if (process.platform === 'win32') {
+      startSleeper();
     }
   } catch (err) {
     console.error('[MongoDB] Connection FAILED:', err.message);

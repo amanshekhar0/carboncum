@@ -15,6 +15,10 @@ const { exportESG } = require('../controllers/exportController');
 const { tradePoints } = require('../controllers/tradeController');
 const { signup, login } = require('../controllers/authController');
 
+const { scanTicket } = require('../controllers/scanController');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
+
 // ---- Auth Routes ----
 router.post('/auth/signup', signup);
 router.post('/auth/login', login);
@@ -23,6 +27,9 @@ router.post('/auth/login', login);
 router.post('/ingest/browser', ingestBrowser);
 router.post('/ingest/hardware', ingestHardware);
 router.post('/ingest/lifestyle', ingestLifestyle);
+
+// ---- Sustainability Features ----
+router.post('/sustainability/scan-ticket', upload.single('image'), scanTicket);
 
 // ---- Dashboard Routes ----
 router.get('/dashboard/metrics', getMetrics);

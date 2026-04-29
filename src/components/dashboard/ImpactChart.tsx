@@ -26,7 +26,7 @@ const periods = [
 ];
 
 export function ImpactChart() {
-  const [chartData, setChartData] = useState<any[]>(MOCK_CHART_DATA);
+  const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('monthly');
 
@@ -39,7 +39,7 @@ export function ImpactChart() {
           setChartData(data.chartData);
         }
       } catch {
-        setChartData(MOCK_CHART_DATA);
+        setChartData([]);
       } finally {
         setLoading(false);
       }

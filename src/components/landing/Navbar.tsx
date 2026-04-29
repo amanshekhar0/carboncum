@@ -46,18 +46,16 @@ export function Navbar() {
             
             Features
           </a>
-          <a
-            href="#how-it-works"
+          <Link
+            to="/how-it-works"
             className="text-sm font-medium text-muted-foreground hover:text-emerald-400 transition-colors">
-            
             How it Works
-          </a>
-          <a
-            href="#enterprise"
+          </Link>
+          <Link
+            to="/enterprise"
             className="text-sm font-medium text-muted-foreground hover:text-emerald-400 transition-colors">
-            
             Enterprise
-          </a>
+          </Link>
           <div className="flex items-center gap-4 ml-4">
             <Link to="/dashboard">
               <Button
