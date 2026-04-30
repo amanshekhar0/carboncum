@@ -9,7 +9,7 @@
  * 4. Post telemetry to localhost:3001/api/ingest/browser
  */
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = 'https://carboncum.onrender.com/api';
 const INACTIVE_THRESHOLD = 30 * 60 * 1000; // 30 minutes
 const DOOMSCROLL_THRESHOLD = 15 * 60 * 1000; // 15 minutes
 
