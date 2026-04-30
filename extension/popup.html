@@ -1,38 +1,253 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
+  <title>CarbonTwin</title>
   <style>
-    body { width: 300px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0a0a0a; color: white; padding: 15px; }
-    h1 { font-size: 1.2rem; color: #10b981; margin: 0 0 10px 0; }
-    .stat { display: flex; justify-between; margin-bottom: 8px; font-size: 0.9rem; }
-    .label { color: #888; }
-    .value { font-weight: bold; }
-    button { width: 100%; background: #10b981; border: none; color: white; padding: 8px; border-radius: 5px; cursor: pointer; margin-top: 10px; font-weight: bold; }
-    button:hover { background: #059669; }
-    .footer { font-size: 0.7rem; color: #555; margin-top: 15px; text-align: center; }
+    :root {
+      --bg: #0a0a0a;
+      --panel: #111;
+      --panel-2: #161616;
+      --border: #1f2937;
+      --text: #ffffff;
+      --muted: #9ca3af;
+      --green: #10b981;
+      --green-dark: #059669;
+      --red: #ef4444;
+      --amber: #f59e0b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      width: 340px;
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .header h1 {
+      font-size: 1.05rem;
+      color: var(--green);
+      margin: 0;
+      letter-spacing: 0.3px;
+    }
+    .badge {
+      font-size: 0.65rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .badge.live { color: var(--green); border-color: rgba(16,185,129,0.4); }
+    .badge.warn { color: var(--amber); border-color: rgba(245,158,11,0.4); }
+    .badge.error { color: var(--red); border-color: rgba(239,68,68,0.4); }
+
+    .conn {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .conn .info { font-size: 0.78rem; color: var(--muted); flex: 1; min-width: 0; word-break: break-word; }
+    .conn .info b { color: var(--text); }
+    .conn .info.error { color: var(--red); }
+    .conn button {
+      width: auto;
+      padding: 6px 10px;
+      font-size: 0.72rem;
+      background: transparent;
+      border: 1px solid var(--green);
+      color: var(--green);
+      flex-shrink: 0;
+    }
+    .conn button:hover { background: rgba(16,185,129,0.12); }
+
+    form.login {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      display: none;
+    }
+    form.login.show { display: block; }
+    form.login .field {
+      margin-bottom: 8px;
+    }
+    form.login label {
+      display: block;
+      font-size: 0.62rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    form.login input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 9px;
+      border-radius: 5px;
+      font-size: 0.85rem;
+      font-family: inherit;
+    }
+    form.login input:focus { outline: none; border-color: var(--green); }
+    form.login .err {
+      color: var(--red);
+      font-size: 0.7rem;
+      margin: 6px 0;
+      min-height: 12px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .card .label {
+      font-size: 0.62rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .card .value {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    .card.full { grid-column: 1 / -1; }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      padding: 6px 0;
+      border-top: 1px solid var(--border);
+    }
+    .row .label { color: var(--muted); }
+    .row .value { font-weight: 600; }
+    .row .value.warn { color: var(--red); }
+
+    button {
+      width: 100%;
+      background: var(--green);
+      border: none;
+      color: white;
+      padding: 9px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: background 0.15s ease;
+    }
+    button:hover { background: var(--green-dark); }
+    button.ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      margin-top: 6px;
+    }
+    button.ghost:hover { color: var(--text); border-color: var(--green); }
+
+    .footer {
+      font-size: 0.65rem;
+      color: #555;
+      margin-top: 10px;
+      text-align: center;
+    }
+    .skeleton { color: #444; }
+    .row-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .row-buttons button { margin: 0; padding: 7px; font-size: 0.75rem; }
   </style>
 </head>
 <body>
-  <h1>CarbonTwin</h1>
-  <div class="stat">
-    <span class="label">Eco-Score</span>
-    <span class="value" id="score">--</span>
+  <div class="header">
+    <h1>CarbonTwin</h1>
+    <span id="status" class="badge">checking…</span>
   </div>
-  <div class="stat">
-    <span class="label">Carbon Saved</span>
-    <span class="value" id="carbon">-- kg</span>
+
+  <div class="conn">
+    <div class="info" id="connInfo">Account: not linked</div>
+    <button id="connectBtn">Connect</button>
   </div>
-  <div class="stat">
-    <span class="label">Rupees Saved</span>
-    <span class="value" id="rupees">₹--</span>
+
+  <form class="login" id="loginForm" autocomplete="on">
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username" placeholder="you@example.com" required />
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" required />
+    </div>
+    <div class="err" id="loginErr"></div>
+    <button id="loginSubmit" type="submit">Sign in</button>
+    <div class="row-buttons">
+      <button id="openSiteBtn" type="button" class="ghost">Open site instead</button>
+      <button id="hideLoginBtn" type="button" class="ghost">Cancel</button>
+    </div>
+  </form>
+
+  <div class="stats">
+    <div class="card">
+      <div class="label">Eco-Score</div>
+      <div class="value skeleton" id="score">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Streak</div>
+      <div class="value skeleton" id="streak">—</div>
+    </div>
+    <div class="card full">
+      <div class="row">
+        <span class="label">Carbon Saved</span>
+        <span class="value skeleton" id="carbon">— kg</span>
+      </div>
+      <div class="row">
+        <span class="label">Rupees Saved</span>
+        <span class="value skeleton" id="rupees">₹—</span>
+      </div>
+      <div class="row">
+        <span class="label">Open Tabs</span>
+        <span class="value skeleton" id="openTabs">—</span>
+      </div>
+      <div class="row">
+        <span class="label">Zombie Tabs (now)</span>
+        <span class="value skeleton" id="zombies">—</span>
+      </div>
+    </div>
   </div>
+
   <button id="dashboard">Open Dashboard</button>
+  <button id="reportNow" class="ghost">Send telemetry now</button>
+
   <div class="footer">Real-time Digital ESG Monitoring</div>
-  <script>
-    document.getElementById('dashboard').onclick = () => {
-      chrome.tabs.create({ url: 'http://localhost:5173/dashboard' });
-    };
-    // In a real version, we'd fetch these from local storage or API
-  </script>
+
+  <script src="popup.js"></script>
 </body>
 </html>
