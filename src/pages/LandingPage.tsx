@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { Navbar } from '../components/landing/Navbar';
 import { HeroSection } from '../components/landing/HeroSection';
 import { FeaturesSection } from '../components/landing/FeaturesSection';
@@ -15,7 +15,7 @@ export function LandingPage() {
       // We'll keep dark mode for the whole app as requested
     };}, []);
   return (
-    <div className="min-h-screen bg-background text-foreground selection:bg-emerald-500/30">
+    <div className="min-h-screen bg-background text-foreground selection:bg-emerald-500/30 overflow-x-hidden">
       <Navbar />
       <main>
         <HeroSection />

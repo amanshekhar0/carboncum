@@ -1,17 +1,34 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Send, Sparkles, Brain, Zap, ShieldCheck, RefreshCw } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { Bot, Send, Sparkles, Brain, Zap, ShieldCheck, RefreshCw, User as UserIcon } from 'lucide-react';
+
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
-import { api } from '../../services/api';
 import { Card } from '../ui/card';
+import { Badge } from '../ui/badge';
+import { api, ApiError } from '../../services/api';
+import { useDashboard } from '../../services/DashboardContext';
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+const QUICK_PROMPTS = [
+  'Explain my Eco-Score',
+  'What should I do next?',
+  'Compare me to a typical user'
+];
 
 export function FullPageCoach() {
-  const [messages, setMessages] = useState([
+  const { user } = useDashboard();
+
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
-      content: "Welcome to your immersive AI Sustainability Command Center. I'm analyzing your real-time carbon footprint. What's our next move?"
+      content:
+        "I have full context on your activity. Ask me to interpret your numbers, suggest the next best action, or explain how a habit affects your score."
     }
   ]);
   const [input, setInput] = useState('');
@@ -30,40 +47,53 @@ export function FullPageCoach() {
 
     const userMsg = input.trim();
     setInput('');
-    const newMessages = [...messages, { role: 'user', content: userMsg }];
-    setMessages(newMessages as any);
+    const newMessages: ChatMessage[] = [...messages, { role: 'user', content: userMsg }];
+    setMessages(newMessages);
     setIsTyping(true);
 
     try {
-      const userId = localStorage.getItem('carbontwin_userId') || '';
-      const history = newMessages.slice(-6).map(m => ({ role: m.role, content: m.content }));
-      const response = await api.chat.sendMessage(userMsg, history.slice(0, -1), userId);
-      
-      setMessages(prev => [...prev, { role: 'assistant', content: response.text }] as any);
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: "My AI neurons are firing slowly. Try again." }] as any);
+      const history = newMessages.slice(-6).map((m) => ({ role: m.role, content: m.content }));
+      const response = await api.chat.sendMessage(userMsg, history.slice(0, -1));
+      setMessages((prev) => [...prev, { role: 'assistant', content: response.text }]);
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : "I couldn't reach the AI service. Please try again shortly.";
+      setMessages((prev) => [...prev, { role: 'assistant', content: message }]);
     } finally {
       setIsTyping(false);
     }
   };
 
+  const insights = [
+    `Your Eco-Score is ${user?.ecoScore ?? 0}/100.`,
+    `${(user?.totalCarbonSaved ?? 0).toFixed(1)} kg CO₂ saved so far.`,
+    `Current streak: ${user?.currentStreak ?? 0} day(s).`
+  ];
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-12rem)]">
-      {/* Sidebar Stats */}
       <div className="lg:col-span-1 space-y-4">
         <Card className="bg-emerald-500/5 border-emerald-500/20 p-4">
           <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2 mb-3">
             <Brain className="w-4 h-4" />
-            AI Context
+            Live context
           </h3>
           <div className="space-y-3">
             <div className="p-2 bg-black/20 rounded-md border border-white/5">
-              <p className="text-[10px] text-muted-foreground uppercase mb-1">Current Focus</p>
-              <p className="text-xs text-white font-medium">Digital Habit Optimization</p>
+              <p className="text-[10px] text-muted-foreground uppercase mb-1">User</p>
+              <p className="text-xs text-foreground font-medium">{user?.name || 'Loading…'}</p>
             </div>
             <div className="p-2 bg-black/20 rounded-md border border-white/5">
-              <p className="text-[10px] text-muted-foreground uppercase mb-1">Knowledge Base</p>
-              <p className="text-xs text-white font-medium">Global ESG Standards v2.4</p>
+              <p className="text-[10px] text-muted-foreground uppercase mb-1">Eco-Score</p>
+              <p className="text-xs text-foreground font-medium">{user?.ecoScore ?? 0}/100</p>
+            </div>
+            <div className="p-2 bg-black/20 rounded-md border border-white/5">
+              <p className="text-[10px] text-muted-foreground uppercase mb-1">Streak</p>
+              <p className="text-xs text-foreground font-medium">
+                {user?.currentStreak ?? 0} day(s)
+              </p>
             </div>
           </div>
         </Card>
@@ -71,17 +101,16 @@ export function FullPageCoach() {
         <Card className="bg-blue-500/5 border-blue-500/20 p-4">
           <h3 className="text-sm font-bold text-blue-400 flex items-center gap-2 mb-3">
             <Zap className="w-4 h-4" />
-            Quick Insights
+            Your insights
           </h3>
           <ul className="text-[11px] space-y-2 text-muted-foreground">
-            <li className="flex gap-2">• AC Temp +1°C saves ₹120/mo</li>
-            <li className="flex gap-2">• Dark mode reduces eye strain 15%</li>
-            <li className="flex gap-2">• Closing tabs frees 2GB RAM</li>
+            {insights.map((i) => (
+              <li key={i}>• {i}</li>
+            ))}
           </ul>
         </Card>
       </div>
 
-      {/* Main Chat Area */}
       <Card className="lg:col-span-3 flex flex-col bg-card border-border overflow-hidden">
         <div className="p-4 border-b border-border bg-secondary/20 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -90,21 +119,22 @@ export function FullPageCoach() {
             </div>
             <div>
               <h2 className="font-bold text-foreground flex items-center gap-2">
-                Groq Eco-Coach Pro
+                Eco-Coach Pro
                 <Sparkles className="w-3 h-3 text-yellow-400" />
               </h2>
               <p className="text-[10px] text-emerald-400 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Llama 3.3 Versatile Active
+                Llama 3.3 · grounded in your real activity
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-              <ShieldCheck className="w-3 h-3 mr-1" />
-              Enterprise
-            </Badge>
-          </div>
+          <Badge
+            variant="outline"
+            className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold"
+          >
+            <ShieldCheck className="w-3 h-3 mr-1 inline" />
+            Private context
+          </Badge>
         </div>
 
         <ScrollArea className="flex-1 p-6" ref={scrollRef}>
@@ -116,9 +146,21 @@ export function FullPageCoach() {
                 key={i}
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                <div className={`flex gap-3 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                  <div className={`mt-1 h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-blue-600' : 'bg-emerald-600'}`}>
-                    {msg.role === 'user' ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-white" />}
+                <div
+                  className={`flex gap-3 max-w-[85%] ${
+                    msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'
+                  }`}
+                >
+                  <div
+                    className={`mt-1 h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
+                      msg.role === 'user' ? 'bg-blue-600' : 'bg-emerald-600'
+                    }`}
+                  >
+                    {msg.role === 'user' ? (
+                      <UserIcon className="w-4 h-4 text-white" />
+                    ) : (
+                      <Bot className="w-4 h-4 text-white" />
+                    )}
                   </div>
                   <div
                     className={`rounded-2xl px-4 py-3 text-sm shadow-sm ${
@@ -151,7 +193,7 @@ export function FullPageCoach() {
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask anything about your carbon footprint..."
+              placeholder="Ask anything about your carbon footprint…"
               className="flex-1 bg-secondary border-border focus-visible:ring-emerald-500 h-12 text-base"
               disabled={isTyping}
             />
@@ -161,44 +203,22 @@ export function FullPageCoach() {
               className="h-12 w-12 bg-emerald-600 hover:bg-emerald-500 shrink-0 shadow-lg shadow-emerald-500/20"
               disabled={!input.trim() || isTyping}
             >
-              <Send className="h-5 h-5" />
+              <Send className="h-5 w-5" />
             </Button>
           </form>
           <div className="mt-3 flex justify-center gap-4">
-             <button className="text-[10px] text-muted-foreground hover:text-emerald-400 transition-colors">Explain my Eco-Score</button>
-             <button className="text-[10px] text-muted-foreground hover:text-emerald-400 transition-colors">Next best action?</button>
-             <button className="text-[10px] text-muted-foreground hover:text-emerald-400 transition-colors">Compare with org average</button>
+            {QUICK_PROMPTS.map((prompt) => (
+              <button
+                key={prompt}
+                onClick={() => setInput(prompt)}
+                className="text-[10px] text-muted-foreground hover:text-emerald-400 transition-colors"
+              >
+                {prompt}
+              </button>
+            ))}
           </div>
         </div>
       </Card>
     </div>
   );
-}
-
-function User(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
-  )
-}
-
-function Badge({ children, variant, className }: any) {
-  return (
-    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase border ${className}`}>
-      {children}
-    </span>
-  )
 }

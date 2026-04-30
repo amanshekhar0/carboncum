@@ -1,11 +1,12 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import GlobeGL from 'react-globe.gl';
-import * as THREE from 'three';
+
+type AltitudeAccessor = number | ((feat: any) => number);
 
 export function Globe() {
   const globeEl = useRef<any>();
   const [countries, setCountries] = useState<any>({ features: [] });
-  const [altitude, setAltitude] = useState(0.1);
+  const [altitude, setAltitude] = useState<AltitudeAccessor>(0.1);
   const [transitionDuration, setTransitionDuration] = useState(1000);
 
   useEffect(() => {
@@ -17,9 +18,9 @@ export function Globe() {
 
         // After a delay, animate the spikes rising SLOWLY
         setTimeout(() => {
-          setTransitionDuration(8000); // Slower, smoother expansion
+          setTransitionDuration(8000);
           setAltitude(() => (feat: any) =>
-            Math.max(0.04, Math.sqrt(+feat.properties.POP_EST) * 4e-5) // Reduced radius
+            Math.max(0.04, Math.sqrt(+feat.properties.POP_EST) * 4e-5)
           );
         }, 1500);
       })
@@ -40,10 +41,8 @@ export function Globe() {
     }
   }, []);
 
-  // Theme Colors (Darker Emerald Teal)
-  const TEAL_PRIMARY = 'rgba(5, 122, 85, 0.9)'; // Deeper shade
+  const TEAL_PRIMARY = 'rgba(5, 122, 85, 0.9)';
   const TEAL_DARK = 'rgba(2, 44, 34, 0.7)';
-  const GLOW_COLOR = 'rgba(5, 122, 85, 0.2)';
 
   return (
     <div className="w-full h-full relative group">

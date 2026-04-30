@@ -1,247 +1,134 @@
 /**
  * AIService.js
- * Wrapper around the Groq API (Llama-3.3-70b model).
- * Used by the chatbot endpoint and the daily nudge cron job.
+ *
+ * Thin wrapper around the Groq Llama API used by:
+ *   - the chatbot endpoint (`ecoCoachChat`)
+ *   - the daily nudge cron job (`generateDailySuggestions`)
+ *
+ * No fake-data injection. If the GROQ_API_KEY is missing the helpers throw a
+ * clear error so the caller can render an honest "AI not configured" state.
  */
 
-const Groq = require('groq-sdk');
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
-// Initialize Groq client with API key from environment
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY
-});
+let groqClient = null;
+const getGroq = () => {
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY is not configured on this server');
+  }
+  if (!groqClient) {
+    const Groq = require('groq-sdk');
+    groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  }
+  return groqClient;
+};
 
-// The primary model to use – fast and powerful
-const MODEL = 'llama-3.3-70b-versatile';
-
-/**
- * Generates a chat completion from Groq.
- * @param {Array} messages - Array of { role, content } objects
- * @param {object} options - Optional overrides (temperature, max_tokens)
- * @returns {string} The assistant's reply text
- */
 const chat = async (messages, options = {}) => {
+  const groq = getGroq();
   const completion = await groq.chat.completions.create({
-    model: MODEL,
+    model: GROQ_MODEL,
     messages,
-    temperature: options.temperature ?? 0.8,
+    temperature: options.temperature ?? 0.7,
     max_tokens: options.max_tokens ?? 512,
     stream: false
   });
-  return completion.choices[0]?.message?.content || '';
+  return completion.choices?.[0]?.message?.content || '';
 };
 
 /**
- * Generates 3 personalized daily eco-suggestions for a user
- * based on their last 7 days of activity logs.
- * @param {object} user - User doc (name, ecoScore, currentStreak)
- * @param {Array} activityLogs - Recent ActivityLog documents
- * @returns {Array} Array of suggestion objects
+ * Generates 3 personalized daily eco suggestions for a user, using their
+ * recent activity logs as concrete context.
  */
 const generateDailySuggestions = async (user, activityLogs) => {
-  const activitySummary = activityLogs.map(log =>
-    `- [${log.category}] ${log.actionName}: ${log.carbonImpact > 0 ? '+' : ''}${log.carbonImpact.toFixed(3)} kg CO2, ₹${log.costImpact.toFixed(2)}`
-  ).join('\n');
+  const summary = (activityLogs || [])
+    .map(
+      (log) =>
+        `- [${log.category}] ${log.actionName}: ${
+          log.carbonImpact > 0 ? '+' : ''
+        }${Number(log.carbonImpact).toFixed(3)} kg CO2, ₹${Number(log.costImpact).toFixed(2)}`
+    )
+    .join('\n');
 
-  const systemPrompt = `You are CarbonTwin's Aggressive Eco-Coach AI. You analyze corporate digital carbon footprints.
-Your personality: Direct, data-driven, slightly sarcastic, but genuinely helpful.
-You speak in startup lingo. You care deeply about climate but don't moralize excessively.
-Always convert CO2 to financial impact in Indian Rupees (₹).`;
+  const systemPrompt = `You are CarbonTwin's Eco-Coach AI. You help users reduce their digital and lifestyle carbon footprint.
+Tone: direct, concrete, practical. No moralizing. Always tie carbon to ₹ savings (Indian Rupees).
+Never invent activity that the user did not actually log.`;
 
-  const userPrompt = `User: ${user.name}
-Current Eco-Score: ${user.ecoScore}/100
-Current Streak: ${user.currentStreak} days
+  const userPrompt = `User: ${user.name || 'User'}
+Eco-Score: ${user.ecoScore ?? 0}/100
+Streak: ${user.currentStreak ?? 0} days
 
-Their activity over the past 7 days:
-${activitySummary}
+Recent activity (last 7 days):
+${summary || '(no activity logged yet)'}
 
-Generate exactly 3 highly specific, actionable suggestions.
-Prioritize these 20 habits:
-1. Tab Management (Zombie Tabs)
-2. Email Decluttering (Delete 1k+ unread)
-3. Video Optimization (4K to 720p/480p)
-4. AI Prompt Efficiency (One-shot prompts)
-5. Cloud Cleanup (Dark Data)
-6. Search Engine Mindfulness (Direct URL vs Search)
-7. Dark Mode Activation
-8. Extension Audit (Disable high-resource ones)
-9. Smart Sleep Mode (vs Idle)
-10. Unplugging Strategy (Vampire power)
-11. Brightness Control (Lower 20-30%)
-12. Peripheral Management (Disconnect unused)
-13. Public Transport (Metro vs Car)
-14. AC Thermostat (+1°C savings)
-15. Meat-Free Rewards
-16. Device-Free Hours
-17. E-waste Extension (Delay upgrades)
-18. Green Electricity Switch
-19. Smart Lighting
-20. Paperless Transition
-
-Format your response as valid JSON array only (no markdown, no explanation):
+Return EXACTLY 3 specific, actionable suggestions as raw JSON. Each suggestion must be tailored to this user's actual behavior (or, if no activity is logged, suggest gentle starter habits).
+Format strictly:
 [
-  {
-    "suggestionText": "specific action they should take",
-    "potentialSavingsKg": <number>,
-    "potentialSavingsInr": <number>,
-    "category": "<Browser|Hardware|Lifestyle>"
-  }
+  {"suggestionText":"<one concrete action>","potentialSavingsKg":<number>,"potentialSavingsInr":<number>,"category":"<Browser|Hardware|Lifestyle>"}
 ]`;
 
-  try {
-    const response = await chat([
+  const response = await chat(
+    [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
-    ], { temperature: 0.7, max_tokens: 600 });
+    ],
+    { temperature: 0.6, max_tokens: 600 }
+  );
 
-    // Parse JSON from Groq response
-    const jsonMatch = response.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-    throw new Error('Could not parse suggestions JSON from AI response');
-  } catch (err) {
-    console.error('[AIService] generateDailySuggestions error:', err.message);
-    // Fallback suggestions if AI fails
-    return [
-      {
-        suggestionText: 'Close inactive browser tabs to reduce RAM and energy consumption.',
-        potentialSavingsKg: 0.5,
-        potentialSavingsInr: 8.0,
-        category: 'Browser'
-      },
-      {
-        suggestionText: 'Reduce video streaming quality from 4K to 1080p for background content.',
-        potentialSavingsKg: 2.1,
-        potentialSavingsInr: 28.5,
-        category: 'Lifestyle'
-      },
-      {
-        suggestionText: 'Enable smart sleep mode on your laptop after 5 minutes of inactivity.',
-        potentialSavingsKg: 0.8,
-        potentialSavingsInr: 12.0,
-        category: 'Hardware'
-      }
-    ];
+  const match = response.match(/\[[\s\S]*\]/);
+  if (!match) {
+    throw new Error('AI response did not contain a JSON array of suggestions');
   }
+  const parsed = JSON.parse(match[0]);
+  if (!Array.isArray(parsed)) {
+    throw new Error('AI response was not an array');
+  }
+  return parsed.slice(0, 3);
 };
 
 /**
- * Chat with the AI Eco-Coach using real user context
- * @param {string} userMessage - The user's query
- * @param {object} dashboardStats - The user's current metrics
- * @param {Array} history - Previous conversation messages
- * @returns {string} AI response text
+ * Streams a single Eco-Coach response with full user context.
  */
 const ecoCoachChat = async (userMessage, dashboardStats, history = []) => {
-  const systemPrompt = `You are CarbonTwin's Eco-Coach — an aggressive but helpful startup sustainability advisor.
+  const recent = (dashboardStats.recentActions || [])
+    .map((a) => `- ${a.category}: ${a.action} (${a.carbonImpact} kg)`)
+    .join('\n');
 
-Your personality traits:
-- Direct and data-driven. No fluff.
-- Slightly sarcastic when users make bad eco choices, but always constructive.
-- You convert everything to ₹ (Indian Rupees) to make abstract CO2 feel financially real.
-- You use startup/tech language.
-- Max 3 sentences per response. Be concise.
+  const systemPrompt = `You are CarbonTwin's Eco-Coach. Tone: direct, practical, supportive. Always frame carbon in ₹ for Indian users. Max 3 sentences.
 
-Current user dashboard stats:
+User context:
+- Name: ${dashboardStats.name || 'the user'}
 - Eco-Score: ${dashboardStats.ecoScore}/100
-- Total Carbon Saved: ${dashboardStats.totalCarbonSaved} kg
-- Total Rupees Saved: ₹${dashboardStats.totalRupeesSaved}
-- Current Streak: ${dashboardStats.currentStreak} days
+- Total CO2 saved: ${dashboardStats.totalCarbonSaved} kg
+- Total ₹ saved: ${dashboardStats.totalRupeesSaved}
+- Current streak: ${dashboardStats.currentStreak} days
+- Recent actions:
+${recent || '(no recent actions)'}
 
-Answer the user's question using these stats where relevant. If they ask why their score dropped, analyze their recent behavior. Always end with one actionable next step.`;
+Use this real data when answering. Never invent numbers. End with one concrete next step.`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
-    ...history.slice(-6), // Keep last 3 exchanges for context
+    ...history.slice(-6).map((h) => ({
+      role: h.role === 'user' ? 'user' : 'assistant',
+      content: String(h.content || '')
+    })),
     { role: 'user', content: userMessage }
   ];
 
-  return await chat(messages, { temperature: 0.85, max_tokens: 256 });
+  return chat(messages, { temperature: 0.75, max_tokens: 256 });
 };
 
-/**
- * Posts a congratulatory Slack message when a user hits Eco-Score 90+
- * Uses the SLACK_WEBHOOK_URL environment variable
- * @param {string} userName
- * @param {number} ecoScore
- */
 const sendSlackCongrats = async (userName, ecoScore) => {
   const webhookUrl = process.env.SLACK_WEBHOOK_URL;
-  if (!webhookUrl) {
-    console.log(`[Slack] Would notify: ${userName} hit Eco-Score ${ecoScore}! (No webhook configured)`);
-    return;
-  }
-
+  if (!webhookUrl) return;
   try {
     const axios = require('axios');
     await axios.post(webhookUrl, {
-      text: `🌱 *${userName}* just hit an Eco-Score of *${ecoScore}/100* on CarbonTwin! 🎉\nThey're saving the planet AND saving ₹. Who's next?`
+      text: `🌱 *${userName}* just hit an Eco-Score of *${ecoScore}/100* on CarbonTwin.`
     });
-    console.log(`[Slack] Congrats notification sent for ${userName}`);
   } catch (err) {
-    console.error('[Slack] Failed to send notification:', err.message);
+    console.warn('[AIService] Slack notification failed:', err.message);
   }
 };
 
-/**
- * Generates initial synthetic activity data for a new user using Groq.
- * This ensures the user doesn't start with "dummy" data but a personalized history.
- */
-const seedUserActivity = async (userId) => {
-  try {
-    const ActivityLog = require('../models/ActivityLog');
-    const User = require('../models/User');
-
-    const prompt = `Generate a realistic 7-day carbon footprint history for a professional user.
-    Categories: Browser, Hardware, Lifestyle.
-    Return a JSON array of objects with: { category, actionName, carbonImpact (negative is saving, positive is emission), costImpact (in INR), date (ISO string for the last 7 days) }.
-    Make it feel personalized and diverse (e.g., streaming 4K, meat-free lunch, closing tabs).
-    Return ONLY the JSON. Example format:
-    { "activities": [ { "category": "Browser", "actionName": "...", "carbonImpact": -0.2, "costImpact": -5.0, "date": "..." } ] }`;
-
-    const response = await chat([
-      { role: 'system', content: 'You are a sustainability data generator. Output ONLY JSON.' },
-      { role: 'user', content: prompt }
-    ], { temperature: 0.7, max_tokens: 1500 });
-
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('AI returned non-JSON response');
-    
-    const content = JSON.parse(jsonMatch[0]);
-    const logs = content.activities || content;
-
-    if (!Array.isArray(logs)) throw new Error('AI returned invalid format');
-
-    const mappedLogs = logs.slice(0, 15).map(l => ({
-      userId,
-      category: l.category || 'Browser',
-      actionName: l.actionName || 'Active Monitoring',
-      carbonImpact: l.carbonImpact || 0,
-      costImpact: l.costImpact || 0,
-      timestamp: new Date(l.date || Date.now()),
-      rawData: { aiGenerated: true }
-    }));
-
-    await ActivityLog.insertMany(mappedLogs);
-
-    // Update user totals
-    const totalCarbon = mappedLogs.reduce((acc, l) => acc + (l.carbonImpact < 0 ? Math.abs(l.carbonImpact) : 0), 0);
-    const totalCost = mappedLogs.reduce((acc, l) => acc + (l.costImpact < 0 ? Math.abs(l.costImpact) : 0), 0);
-
-    await User.findByIdAndUpdate(userId, {
-      totalCarbonSaved: totalCarbon,
-      totalRupeesSaved: totalCost,
-      currentStreak: 7,
-      ecoScore: Math.min(100, Math.round((totalCarbon / 10) * 100) + 40)
-    });
-
-    console.log(`[AIService] Seeded ${mappedLogs.length} activities for user ${userId}`);
-    return true;
-  } catch (err) {
-    console.error('[AIService] seedUserActivity failed:', err.message);
-    return false;
-  }
-};
-
-module.exports = { generateDailySuggestions, ecoCoachChat, sendSlackCongrats, seedUserActivity };
+module.exports = { generateDailySuggestions, ecoCoachChat, sendSlackCongrats };

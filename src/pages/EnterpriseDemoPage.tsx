@@ -1,4 +1,3 @@
-import React from 'react';
 import { motion } from 'framer-motion';
 import { 
   Building2, 
@@ -7,8 +6,7 @@ import {
   Globe2, 
   ArrowRight,
   ChevronRight,
-  Zap,
-  Leaf
+  Zap
 } from 'lucide-react';
 import { Navbar } from '../components/landing/Navbar';
 import { Footer } from '../components/landing/Footer';
@@ -81,12 +79,14 @@ export function EnterpriseDemoPage() {
             >
               <Link to="/auth">
                 <Button size="lg" className="h-14 px-8 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-lg font-bold">
-                  Schedule Demo <ArrowRight className="ml-2 w-5 h-5" />
+                  Try the live demo <ArrowRight className="ml-2 w-5 h-5" />
                 </Button>
               </Link>
-              <Button size="lg" variant="outline" className="h-14 px-8 border-white/10 hover:bg-white/5 rounded-xl text-lg">
-                View Pricing
-              </Button>
+              <Link to="/how-it-works">
+                <Button size="lg" variant="outline" className="h-14 px-8 border-white/10 hover:bg-white/5 rounded-xl text-lg">
+                  How it works
+                </Button>
+              </Link>
             </motion.div>
           </div>
         </section>
@@ -145,13 +145,14 @@ export function EnterpriseDemoPage() {
           <div className="max-w-5xl mx-auto rounded-[40px] bg-gradient-to-br from-blue-600 to-emerald-600 p-12 md:p-20 text-center relative overflow-hidden">
              <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20" />
              <div className="relative z-10 space-y-8">
-                <h2 className="text-4xl md:text-5xl font-black">Ready to scale your sustainability?</h2>
+                <h2 className="text-4xl md:text-5xl font-black">Built for teams that ship.</h2>
                 <p className="text-xl text-white/80 max-w-2xl mx-auto">
-                  Join 500+ global enterprises using CarbonTwin to meet their 2030 Net Zero goals.
+                  CarbonTwin is open-source and self-hostable. Sign up to try the same dashboard
+                  every team member sees, then deploy it to your own org with one repo.
                 </p>
                 <Link to="/auth">
                   <Button size="lg" className="h-16 px-12 bg-white text-blue-600 hover:bg-zinc-100 rounded-2xl text-xl font-black shadow-xl">
-                    Get Enterprise Access
+                    Try the live demo
                   </Button>
                 </Link>
              </div>

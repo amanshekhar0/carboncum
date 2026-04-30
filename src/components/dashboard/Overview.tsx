@@ -1,4 +1,3 @@
-import React from 'react';
 import { MetricsCards } from './MetricsCards';
 import { ImpactChart } from './ImpactChart';
 import { WhatIfSimulator } from './WhatIfSimulator';

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Leaf, Menu, X } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -57,7 +57,7 @@ export function Navbar() {
             Enterprise
           </Link>
           <div className="flex items-center gap-4 ml-4">
-            <Link to="/dashboard">
+            <Link to="/auth">
               <Button
                 variant="ghost"
                 className="text-muted-foreground hover:text-foreground">
@@ -65,9 +65,9 @@ export function Navbar() {
                 Log in
               </Button>
             </Link>
-            <Link to="/dashboard">
+            <Link to="/auth">
               <Button className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]">
-                Start Free Trial
+                Get started
               </Button>
             </Link>
           </div>
@@ -123,14 +123,14 @@ export function Navbar() {
                 Enterprise
               </a>
               <div className="flex flex-col gap-3 mt-4">
-                <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)}>
+                <Link to="/auth" onClick={() => setMobileMenuOpen(false)}>
                   <Button variant="outline" className="w-full">
                     Log in
                   </Button>
                 </Link>
-                <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)}>
+                <Link to="/auth" onClick={() => setMobileMenuOpen(false)}>
                   <Button className="w-full bg-emerald-600 hover:bg-emerald-700">
-                    Start Free Trial
+                    Get started
                   </Button>
                 </Link>
               </div>

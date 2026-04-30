@@ -1,65 +1,93 @@
 /**
  * routes/index.js
- * Central router that mounts all API endpoints.
+ * Central router that mounts every API endpoint.
  */
 
 const express = require('express');
-const router = express.Router();
+const multer = require('multer');
 
-const { ingestBrowser, ingestHardware, ingestLifestyle } = require('../controllers/ingestController');
-const { getMetrics, getLeaderboard, seedDemo } = require('../controllers/dashboardController');
+const authMiddleware = require('../middleware/authMiddleware');
+const {
+  signup,
+  login,
+  me,
+  updateProfile,
+  changePassword,
+  deleteAccount
+} = require('../controllers/authController');
+const {
+  ingestBrowser,
+  ingestHardware,
+  ingestLifestyle
+} = require('../controllers/ingestController');
+const {
+  getMetrics,
+  getLeaderboard,
+  getActivity
+} = require('../controllers/dashboardController');
 const { whatIf } = require('../controllers/simulatorController');
 const { sendMessage } = require('../controllers/chatController');
-const { getSuggestions, actionSuggestion, generateSuggestions } = require('../controllers/suggestionController');
+const {
+  getSuggestions,
+  actionSuggestion,
+  generateSuggestions
+} = require('../controllers/suggestionController');
 const { exportESG } = require('../controllers/exportController');
 const { tradePoints } = require('../controllers/tradeController');
-const { signup, login } = require('../controllers/authController');
-
 const { scanTicket } = require('../controllers/scanController');
-const multer = require('multer');
-const upload = multer({ storage: multer.memoryStorage() });
+const { getGlobalStats } = require('../controllers/statsController');
 
-// ---- Auth Routes ----
+const router = express.Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+});
+
+// ---- Public ----
+router.get('/health', (req, res) => {
+  res.json({ status: 'ok', service: 'CarbonTwin API', timestamp: new Date().toISOString() });
+});
+router.get('/stats/global', getGlobalStats);
+
+// ---- Auth ----
 router.post('/auth/signup', signup);
 router.post('/auth/login', login);
+router.get('/auth/me', authMiddleware, me);
+router.patch('/auth/profile', authMiddleware, updateProfile);
+router.patch('/auth/password', authMiddleware, changePassword);
+router.delete('/auth/account', authMiddleware, deleteAccount);
 
-// ---- Ingestion Routes ----
-router.post('/ingest/browser', ingestBrowser);
-router.post('/ingest/hardware', ingestHardware);
-router.post('/ingest/lifestyle', ingestLifestyle);
+// ---- Dashboard ----
+router.get('/dashboard/metrics', authMiddleware, getMetrics);
+router.get('/dashboard/leaderboard', authMiddleware, getLeaderboard);
+router.get('/dashboard/activity', authMiddleware, getActivity);
 
-// ---- Sustainability Features ----
-router.post('/sustainability/scan-ticket', upload.single('image'), scanTicket);
+// ---- Ingestion ----
+router.post('/ingest/browser', authMiddleware, ingestBrowser);
+router.post('/ingest/hardware', authMiddleware, ingestHardware);
+router.post('/ingest/lifestyle', authMiddleware, ingestLifestyle);
 
-// ---- Dashboard Routes ----
-router.get('/dashboard/metrics', getMetrics);
-router.get('/dashboard/leaderboard', getLeaderboard);
-router.get('/dashboard/seed', seedDemo); // Dev only: seed demo data
+// ---- Sustainability features ----
+router.post(
+  '/sustainability/scan-ticket',
+  authMiddleware,
+  upload.single('image'),
+  scanTicket
+);
 
 // ---- Simulator ----
-router.post('/simulator/what-if', whatIf);
+router.post('/simulator/what-if', authMiddleware, whatIf);
 
-// ---- AI Chat ----
-router.post('/chat', sendMessage);
+// ---- AI ----
+router.post('/chat', authMiddleware, sendMessage);
+router.get('/suggestions', authMiddleware, getSuggestions);
+router.patch('/suggestions/:id', authMiddleware, actionSuggestion);
+router.post('/suggestions/generate', authMiddleware, generateSuggestions);
 
-// ---- Suggestions ----
-router.get('/suggestions', getSuggestions);
-router.patch('/suggestions/:id', actionSuggestion);
-router.post('/suggestions/generate', generateSuggestions);
+// ---- ESG ----
+router.get('/export/esg', authMiddleware, exportESG);
 
-// ---- ESG Export ----
-router.get('/export/esg', exportESG);
-
-// ---- P2P Trading ----
-router.post('/trade/points', tradePoints);
-
-// ---- Health Check ----
-router.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'CarbonTwin API',
-    timestamp: new Date().toISOString()
-  });
-});
+// ---- P2P trading ----
+router.post('/trade/points', authMiddleware, tradePoints);
 
 module.exports = router;

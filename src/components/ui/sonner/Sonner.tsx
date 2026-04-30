@@ -1,6 +1,5 @@
 import React from "react";
 import { Toaster as SonnerToaster } from "sonner";
-import { cn } from "../utils";
 
 interface ToasterProps {
   className?: string;

@@ -22,6 +22,14 @@ chrome.tabs.onActivated.addListener(activeInfo => {
   tabActivity[tabId] = Date.now();
 });
 
+// Listen for token sync from content script
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'SET_TOKEN') {
+    chrome.storage.local.set({ token: request.token });
+    console.log('[CarbonTwin] Auth token synced.');
+  }
+});
+
 // Periodic alarm to check for zombies and post telemetry
 chrome.alarms.create('carbonCheck', { periodInMinutes: 5 });
 
@@ -119,13 +127,30 @@ function trackSocialMedia(tabId) {
 
 async function reportToBackend(payload) {
   try {
+    const { token } = await chrome.storage.local.get('token');
+    
+    if (!token) {
+      console.warn('[CarbonTwin] No auth token found. User must be logged in to report telemetry.');
+      return;
+    }
+
     const res = await fetch(`${API_BASE}/ingest/browser`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
       body: JSON.stringify(payload)
     });
+    
+    if (res.status === 401) {
+      console.error('[CarbonTwin] Auth token expired or invalid.');
+      chrome.storage.local.remove('token');
+      return;
+    }
+
     console.log('[CarbonTwin] Telemetry reported:', await res.json());
   } catch (err) {
-    console.warn('[CarbonTwin] API unavailable, skipping report.');
+    console.warn('[CarbonTwin] API unavailable or error reporting telemetry:', err.message);
   }
 }

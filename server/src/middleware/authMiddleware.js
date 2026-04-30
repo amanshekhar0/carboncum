@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const JWT_SECRET = process.env.JWT_SECRET || 'carbontwin_secret_key_123';
+const JWT_SECRET = process.env.JWT_SECRET || 'carbontwin_secret_key_dev_only';
 
 const authMiddleware = (req, res, next) => {
   try {

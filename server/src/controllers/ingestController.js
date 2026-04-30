@@ -1,217 +1,175 @@
 /**
  * ingestController.js
- * Handles all incoming telemetry from clients:
- *   POST /api/ingest/browser   - Chrome Extension data
- *   POST /api/ingest/hardware  - Smart device events
- *   POST /api/ingest/lifestyle - Manual user inputs
- * 
- * Architecture: Each route calculates impact via CarbonEngine,
- * writes to ActivityLog, then updates the User's running totals.
+ *
+ * POST /api/ingest/browser   – Chrome extension telemetry
+ * POST /api/ingest/hardware  – hardware/sleep events
+ * POST /api/ingest/lifestyle – manual lifestyle log
+ *
+ * Each route:
+ *  1. Computes carbon/cost via CarbonEngine
+ *  2. Persists an ActivityLog row
+ *  3. Updates the user's running totals + Eco-Score
+ *  4. Emits a real-time socket update to the connected dashboard
  */
+
+const mongoose = require('mongoose');
 
 const ActivityLog = require('../models/ActivityLog');
 const User = require('../models/User');
-const { calculateBrowserImpact, calculateHardwareImpact, calculateLifestyleImpact } = require('../services/CarbonEngine');
+const {
+  calculateBrowserImpact,
+  calculateHardwareImpact,
+  calculateLifestyleImpact
+} = require('../services/CarbonEngine');
 const { sendSlackCongrats } = require('../services/AIService');
 const { del } = require('../services/RedisService');
+const { emitUpdate } = require('../services/SocketService');
 
-// Default demo user ID (in production this comes from JWT auth middleware)
-const DEMO_USER_ID = process.env.DEMO_USER_ID;
-
-const updateUserTotals = async (userId, carbonImpact, costImpact) => {
-  try {
-    const mongoose = require('mongoose');
-    if (mongoose.connection.readyState !== 1) {
-      console.warn('[ingestController] Skipping DB update – not connected');
-      return { ecoScore: 50, name: 'Guest' }; // Return a dummy user object
-    }
-
-    let user = await User.findById(userId);
-    if (!user) {
-      user = await User.create({
-        _id: userId,
-        name: 'Aarav Sharma',
-        email: 'aarav@startup.io',
-        ecoScore: 50,
-        currentStreak: 0,
-        totalCarbonSaved: 0,
-        totalRupeesSaved: 0
-      });
-    }
-
-    // Only count savings (negative impact means saved)
-    if (carbonImpact < 0) {
-      user.totalCarbonSaved += Math.abs(carbonImpact);
-      user.totalRupeesSaved += Math.abs(costImpact);
-    }
-
-    // Update streak: if last active was yesterday, increment streak
-    const today = new Date().toDateString();
-    const lastActive = new Date(user.lastActiveDate).toDateString();
-    const yesterday = new Date(Date.now() - 86400000).toDateString();
-
-    if (lastActive !== today) {
-      if (lastActive === yesterday) {
-        user.currentStreak += 1;
-      } else if (lastActive !== today) {
-        user.currentStreak = 1; // Reset streak
-      }
-      user.lastActiveDate = new Date();
-    }
-
-    // Recalculate eco-score
-    user.recalculateEcoScore();
-    await user.save();
-
-    // Invalidate cached leaderboard when user stats change
-    await del(`leaderboard:${user.organizationId || 'default'}`);
-    await del('leaderboard:default');
-
-    // Notify Slack if user just crossed 90
-    if (user.ecoScore >= 90) {
-      sendSlackCongrats(user.name, user.ecoScore).catch(console.error);
-    }
-
-    return user;
-  } catch (err) {
-    console.error('[ingestController] updateUserTotals error:', err.message);
+const ensureDb = (res) => {
+  if (mongoose.connection.readyState !== 1) {
+    res.status(503).json({ error: 'Database is currently unavailable. Please retry shortly.' });
+    return false;
   }
+  return true;
 };
 
-/**
- * POST /api/ingest/browser
- * Body: { userId?, tabCount, videoHours, videoQuality, searchCount, emailMb }
- */
+const updateUserTotals = async (userId, carbonImpact, costImpact) => {
+  const user = await User.findById(userId);
+  if (!user) return null;
+
+  if (carbonImpact < 0) {
+    user.totalCarbonSaved = Number((user.totalCarbonSaved + Math.abs(carbonImpact)).toFixed(3));
+    user.totalRupeesSaved = Number((user.totalRupeesSaved + Math.abs(costImpact)).toFixed(2));
+    // Reward modest eco-points for net positive actions
+    user.ecoPoints = (user.ecoPoints || 0) + Math.max(1, Math.round(Math.abs(carbonImpact) * 10));
+  }
+
+  const today = new Date().toDateString();
+  const last = user.lastActiveDate ? new Date(user.lastActiveDate).toDateString() : null;
+  const yesterday = new Date(Date.now() - 86400000).toDateString();
+  if (last !== today) {
+    user.currentStreak = last === yesterday ? (user.currentStreak || 0) + 1 : 1;
+    user.lastActiveDate = new Date();
+  }
+
+  user.recalculateEcoScore();
+  await user.save();
+
+  await del('leaderboard:global');
+  await del('stats:global');
+
+  emitUpdate(userId.toString(), {
+    id: user._id,
+    name: user.name,
+    ecoScore: user.ecoScore,
+    currentStreak: user.currentStreak,
+    totalCarbonSaved: user.totalCarbonSaved,
+    totalRupeesSaved: user.totalRupeesSaved,
+    ecoPoints: user.ecoPoints
+  });
+
+  if (user.ecoScore >= 90) {
+    sendSlackCongrats(user.name, user.ecoScore).catch(() => {});
+  }
+
+  return user;
+};
+
 const ingestBrowser = async (req, res) => {
   try {
-    const { userId, tabCount = 0, videoHours = 0, videoQuality = '1080p', searchCount = 0, emailMb = 0 } = req.body;
-    const uid = userId || DEMO_USER_ID;
+    if (!ensureDb(res)) return;
+    const impact = calculateBrowserImpact(req.body || {});
 
-    const impact = calculateBrowserImpact({ tabCount, videoHours, videoQuality, searchCount, emailMb });
-
-    const mongoose = require('mongoose');
-    let log = { _id: 'mock_log' };
-    if (mongoose.connection.readyState === 1) {
-      log = await ActivityLog.create({
-        userId: uid,
-        category: 'Browser',
-        actionName: buildBrowserActionName(req.body),
-        carbonImpact: impact.carbonImpact,
-        costImpact: impact.costImpact,
-        rawData: req.body
-      });
-    }
-
-    const user = await updateUserTotals(uid, impact.carbonImpact, impact.costImpact);
-
-    res.json({
-      success: true,
-      logId: log._id,
-      impact,
-      updatedEcoScore: user?.ecoScore
+    const log = await ActivityLog.create({
+      userId: req.userId,
+      category: 'Browser',
+      actionName: buildBrowserActionName(req.body || {}),
+      carbonImpact: impact.carbonImpact,
+      costImpact: impact.costImpact,
+      rawData: req.body
     });
+
+    const user = await updateUserTotals(req.userId, impact.carbonImpact, impact.costImpact);
+    res.json({ success: true, logId: log._id, impact, updatedEcoScore: user?.ecoScore || 0 });
   } catch (err) {
-    console.error('[ingestBrowser]', err.message);
+    console.error('[ingestController] ingestBrowser error:', err.message);
     res.status(500).json({ error: 'Failed to ingest browser activity' });
   }
 };
 
-/**
- * POST /api/ingest/hardware
- * Body: { userId?, sleepHours, brightnessReductionPercent, smartChargingEnabled }
- */
 const ingestHardware = async (req, res) => {
   try {
-    const { userId, sleepHours = 0, brightnessReductionPercent = 0, smartChargingEnabled = false } = req.body;
-    const uid = userId || DEMO_USER_ID;
+    if (!ensureDb(res)) return;
+    const impact = calculateHardwareImpact(req.body || {});
 
-    const impact = calculateHardwareImpact({ sleepHours, brightnessReductionPercent, smartChargingEnabled });
+    const log = await ActivityLog.create({
+      userId: req.userId,
+      category: 'Hardware',
+      actionName: buildHardwareActionName(req.body || {}),
+      carbonImpact: impact.carbonImpact,
+      costImpact: impact.costImpact,
+      rawData: req.body
+    });
 
-    const mongoose = require('mongoose');
-    let log = { _id: 'mock_log' };
-    if (mongoose.connection.readyState === 1) {
-      log = await ActivityLog.create({
-        userId: uid,
-        category: 'Hardware',
-        actionName: buildHardwareActionName(req.body),
-        carbonImpact: impact.carbonImpact,
-        costImpact: impact.costImpact,
-        rawData: req.body
-      });
-    }
-
-    const user = await updateUserTotals(uid, impact.carbonImpact, impact.costImpact);
-
-    res.json({ success: true, logId: log._id, impact, updatedEcoScore: user?.ecoScore });
+    const user = await updateUserTotals(req.userId, impact.carbonImpact, impact.costImpact);
+    res.json({ success: true, logId: log._id, impact, updatedEcoScore: user?.ecoScore || 0 });
   } catch (err) {
-    console.error('[ingestHardware]', err.message);
+    console.error('[ingestController] ingestHardware error:', err.message);
     res.status(500).json({ error: 'Failed to ingest hardware activity' });
   }
 };
 
-/**
- * POST /api/ingest/lifestyle
- * Body: { userId?, acTempIncrease, meatFreeDays, publicTransportDays }
- */
 const ingestLifestyle = async (req, res) => {
   try {
-    const { userId, acTempIncrease = 0, meatFreeDays = 0, publicTransportDays = 0 } = req.body;
-    const uid = userId || DEMO_USER_ID;
+    if (!ensureDb(res)) return;
+    const impact = calculateLifestyleImpact(req.body || {});
 
-    const impact = calculateLifestyleImpact({ acTempIncrease, meatFreeDays, publicTransportDays });
+    const log = await ActivityLog.create({
+      userId: req.userId,
+      category: 'Lifestyle',
+      actionName: buildLifestyleActionName(req.body || {}),
+      carbonImpact: impact.carbonImpact,
+      costImpact: impact.costImpact,
+      rawData: req.body
+    });
 
-    const mongoose = require('mongoose');
-    let log = { _id: 'mock_log' };
-    if (mongoose.connection.readyState === 1) {
-      log = await ActivityLog.create({
-        userId: uid,
-        category: 'Lifestyle',
-        actionName: buildLifestyleActionName(req.body),
-        carbonImpact: impact.carbonImpact,
-        costImpact: impact.costImpact,
-        rawData: req.body
-      });
-    }
-
-    const user = await updateUserTotals(uid, impact.carbonImpact, impact.costImpact);
-
-    res.json({ success: true, logId: log._id, impact, updatedEcoScore: user?.ecoScore });
+    const user = await updateUserTotals(req.userId, impact.carbonImpact, impact.costImpact);
+    res.json({ success: true, logId: log._id, impact, updatedEcoScore: user?.ecoScore || 0 });
   } catch (err) {
-    console.error('[ingestLifestyle]', err.message);
+    console.error('[ingestController] ingestLifestyle error:', err.message);
     res.status(500).json({ error: 'Failed to ingest lifestyle activity' });
   }
 };
 
-// ----- Action name builders -----
 const buildBrowserActionName = (data) => {
   const parts = [];
-  if (data.tabCount > 0) parts.push(`${data.tabCount} Zombie Tabs`);
-  if (data.videoHours > 0) parts.push(`${data.videoHours}h ${data.videoQuality || '1080p'} Streaming`);
-  if (data.searchCount > 0) parts.push(`${data.searchCount} Web Searches`);
-  if (data.aiTokens > 0) parts.push(`${data.aiTokens} AI Tokens`);
-  if (data.isDarkMode) parts.push('Dark Mode Active');
-  if (data.directNavigationCount > 0) parts.push(`${data.directNavigationCount} Direct Navigations`);
-  return parts.length > 0 ? parts.join(', ') : 'Browser Activity';
+  if (data.tabCount > 0) parts.push(`${data.tabCount} inactive tabs`);
+  if (data.videoHours > 0) parts.push(`${data.videoHours}h ${data.videoQuality || '1080p'} streaming`);
+  if (data.searchCount > 0) parts.push(`${data.searchCount} web searches`);
+  if (data.aiTokens > 0) parts.push(`${data.aiTokens} AI tokens`);
+  if (data.isDarkMode) parts.push('Dark mode active');
+  if (data.directNavigationCount > 0) parts.push(`${data.directNavigationCount} direct navigations`);
+  return parts.length > 0 ? parts.join(', ') : 'Browser activity';
 };
 
 const buildHardwareActionName = (data) => {
   const parts = [];
-  if (data.sleepHours > 0) parts.push(`Sleep Mode ${data.sleepHours}h`);
+  if (data.sleepHours > 0) parts.push(`Sleep mode ${data.sleepHours}h`);
   if (data.brightnessReductionPercent > 0) parts.push(`Brightness -${data.brightnessReductionPercent}%`);
-  if (data.smartChargingEnabled) parts.push('Smart Charging');
+  if (data.smartChargingEnabled) parts.push('Smart charging on');
   if (data.unpluggedHours > 0) parts.push(`Unplugged ${data.unpluggedHours}h`);
-  if (data.peripheralsDisconnected > 0) parts.push(`${data.peripheralsDisconnected} Peripherals Off`);
-  return parts.length > 0 ? parts.join(', ') : 'Hardware Activity';
+  if (data.peripheralsDisconnected > 0) parts.push(`${data.peripheralsDisconnected} peripherals off`);
+  return parts.length > 0 ? parts.join(', ') : 'Hardware activity';
 };
 
 const buildLifestyleActionName = (data) => {
   const parts = [];
   if (data.acTempIncrease > 0) parts.push(`AC +${data.acTempIncrease}°C`);
-  if (data.meatFreeDays > 0) parts.push(`${data.meatFreeDays} Meat-Free Day(s)`);
-  if (data.publicTransportDays > 0) parts.push(`${data.publicTransportDays} Public Transport Day(s)`);
-  if (data.paperlessPages > 0) parts.push(`${data.paperlessPages} Paperless Pages`);
-  if (data.deviceFreeHours > 0) parts.push(`${data.deviceFreeHours} Device-Free Hours`);
-  return parts.length > 0 ? parts.join(', ') : 'Lifestyle Activity';
+  if (data.meatFreeDays > 0) parts.push(`${data.meatFreeDays} meat-free day(s)`);
+  if (data.publicTransportDays > 0) parts.push(`${data.publicTransportDays} public-transport day(s)`);
+  if (data.paperlessPages > 0) parts.push(`${data.paperlessPages} paperless pages`);
+  if (data.deviceFreeHours > 0) parts.push(`${data.deviceFreeHours} device-free hours`);
+  return parts.length > 0 ? parts.join(', ') : 'Lifestyle activity';
 };
 
 module.exports = { ingestBrowser, ingestHardware, ingestLifestyle };

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Navbar } from '../components/landing/Navbar';
 import { HowItWorks } from '../components/landing/HowItWorks';
 import { Footer } from '../components/landing/Footer';
@@ -47,9 +46,12 @@ export function HowItWorksPage() {
               </div>
               <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-3xl p-8 aspect-square flex items-center justify-center relative overflow-hidden">
                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-emerald-500/10 via-transparent to-transparent" />
-                 <div className="text-center relative z-10">
-                    <div className="text-6xl font-black text-emerald-500 mb-2">99.9%</div>
-                    <p className="text-sm font-bold uppercase tracking-widest text-emerald-400">Accuracy Rate</p>
+                 <div className="text-center relative z-10 space-y-3">
+                    <div className="text-5xl font-black text-emerald-500 mb-2">0.71</div>
+                    <p className="text-sm font-bold uppercase tracking-widest text-emerald-400">kg CO₂ / kWh</p>
+                    <p className="text-xs text-muted-foreground max-w-[220px] mx-auto">
+                      India CEA grid intensity factor (2023). Multiplied by PUE 1.2, this drives every CarbonTwin calculation.
+                    </p>
                  </div>
               </div>
            </div>

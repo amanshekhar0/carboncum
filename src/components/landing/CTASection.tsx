@@ -1,8 +1,9 @@
-import React from 'react';
 import { motion } from 'framer-motion';
-import { Button } from '../ui/button';
 import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+
+import { Button } from '../ui/button';
+
 export function CTASection() {
   return (
     <section className="py-24 relative overflow-hidden">
@@ -11,49 +12,43 @@ export function CTASection() {
 
       <div className="container mx-auto px-4 relative z-10">
         <motion.div
-          initial={{
-            opacity: 0,
-            y: 30
-          }}
-          whileInView={{
-            opacity: 1,
-            y: 0
-          }}
-          viewport={{
-            once: true
-          }}
-          className="max-w-4xl mx-auto text-center bg-card/50 backdrop-blur-xl border border-emerald-500/30 p-12 rounded-3xl shadow-2xl">
-          
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="max-w-4xl mx-auto text-center bg-card/50 backdrop-blur-xl border border-emerald-500/30 p-12 rounded-3xl shadow-2xl"
+        >
           <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-6">
-            Ready to stop burning money and carbon?
+            See your real footprint. Then shrink it.
           </h2>
           <p className="text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
-            Deploy CarbonTwin to your organization in minutes. Watch your
-            employees compete to reduce your AWS bill and carbon footprint.
+            Sign up free, log a few habits, and watch CarbonTwin turn your activity into a real
+            Eco-Score backed by India CEA grid data and an AI coach.
           </p>
 
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Link to="/dashboard">
+            <Link to="/auth">
               <Button
                 size="lg"
-                className="h-14 px-8 text-lg bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto">
-                
-                Start Free Trial <ArrowRight className="ml-2 w-5 h-5" />
+                className="h-14 px-8 text-lg bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
+              >
+                Create free account <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
             </Link>
-            <Button
-              size="lg"
-              variant="outline"
-              className="h-14 px-8 text-lg border-emerald-500/30 hover:bg-emerald-500/10 w-full sm:w-auto">
-              
-              Schedule Demo
-            </Button>
+            <Link to="/how-it-works">
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-14 px-8 text-lg border-emerald-500/30 hover:bg-emerald-500/10 w-full sm:w-auto"
+              >
+                See the science
+              </Button>
+            </Link>
           </div>
           <p className="mt-6 text-sm text-muted-foreground">
-            No credit card required. 14-day free trial for up to 50 users.
+            Open-source hackathon project. No credit card. No marketing emails.
           </p>
         </motion.div>
       </div>
-    </section>);
-
+    </section>
+  );
 }

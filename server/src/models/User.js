@@ -93,10 +93,17 @@ UserSchema.index({ organizationId: 1, ecoScore: -1 });
  * Called after each activity ingestion.
  */
 UserSchema.methods.recalculateEcoScore = function () {
-  // Base score: 0-100 mapped from carbon saved (0-500kg = 0-80 pts)
-  const carbonScore = Math.min(80, (this.totalCarbonSaved / 500) * 80);
-  // Streak bonus: up to 20 pts for 30-day streak
-  const streakScore = Math.min(20, (this.currentStreak / 30) * 20);
+  // Ensure totals are rounded to avoid long decimals (e.g. 23.660000001)
+  this.totalCarbonSaved = Number(this.totalCarbonSaved.toFixed(3));
+  this.totalRupeesSaved = Number(this.totalRupeesSaved.toFixed(2));
+
+  // Base score: 0-100 mapped from carbon saved
+  // Denominator reduced to 250kg to make it feel more rewarding for new users
+  const carbonScore = Math.min(80, (this.totalCarbonSaved / 250) * 80);
+  
+  // Streak bonus: up to 20 pts for 14-day streak (reduced from 30 to be more attainable)
+  const streakScore = Math.min(20, (this.currentStreak / 14) * 20);
+  
   this.ecoScore = Math.round(carbonScore + streakScore);
 };
 

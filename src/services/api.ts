@@ -1,232 +1,281 @@
 /**
  * api.ts
- * Real API client for CarbonTwin backend.
- * Replaces mockApi.ts – all calls go to http://localhost:3001/api
- * Falls back gracefully to mock data if backend is unavailable.
+ * Real API client for the CarbonTwin backend.
+ *
+ * Single source of truth for HTTP calls.
+ * No silent mock fallbacks – errors propagate so the UI can show truthful empty/error states.
  */
 
-import { MOCK_USER, MOCK_CHART_DATA, MOCK_LEADERBOARD, MOCK_SUGGESTIONS, MOCK_ACTIVITY_LOG } from './mockData';
+const RAW_BASE_URL =
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) ||
+  'http://localhost:3001/api';
 
-const BASE_URL = 'http://localhost:3001/api';
+const BASE_URL = (() => {
+  const trimmed = RAW_BASE_URL.replace(/\/+$/, '');
+  return /\/api$/i.test(trimmed) ? trimmed : `${trimmed}/api`;
+})();
 
-// Default demo user ID stored locally
-const getDemoUserId = () => localStorage.getItem('carbontwin_userId') || '';
+const STORAGE_TOKEN = 'carbontwin_token';
+const STORAGE_USER_ID = 'carbontwin_userId';
+const STORAGE_USER_NAME = 'carbontwin_userName';
+const STORAGE_USER_EMAIL = 'carbontwin_userEmail';
 
-const setDemoUserId = (id: string) => localStorage.setItem('carbontwin_userId', id);
-
-// Generic fetch wrapper with error handling and fallback
-const apiFetch = async <T>(
-  path: string,
-  options: RequestInit = {},
-  fallback?: T
-): Promise<T> => {
-  try {
-    const token = localStorage.getItem('carbontwin_token');
-    const headers: any = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-
-    const res = await fetch(`${BASE_URL}${path}`, {
-      ...options,
-      headers: { ...headers, ...options.headers }
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(err.error || `HTTP ${res.status}`);
-    }
-    return await res.json();
-  } catch (err) {
-    console.warn(`[API] ${path} failed:`, (err as Error).message, fallback ? '(using fallback)' : '');
-    if (fallback !== undefined) return fallback;
-    throw err;
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
   }
+}
+
+const buildHeaders = (extra: Record<string, string> = {}): Record<string, string> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extra };
+  const token = localStorage.getItem(STORAGE_TOKEN);
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+};
+
+const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers: buildHeaders(options.headers as Record<string, string>)
+  });
+
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    localStorage.removeItem(STORAGE_TOKEN);
+    localStorage.removeItem(STORAGE_USER_ID);
+    localStorage.removeItem(STORAGE_USER_NAME);
+    localStorage.removeItem(STORAGE_USER_EMAIL);
+    if (typeof window !== 'undefined') {
+      window.location.href = '/auth';
+    }
+    throw new ApiError('Session expired', 401);
+  }
+
+  const text = await res.text();
+  let body: any = null;
+  if (text) {
+    try { body = JSON.parse(text); } catch { body = text; }
+  }
+
+  if (!res.ok) {
+    const message = (body && body.error) || res.statusText || `HTTP ${res.status}`;
+    throw new ApiError(message, res.status);
+  }
+  return body as T;
+};
+
+export interface AuthResponse {
+  token: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    ecoScore: number;
+  };
+}
+
+export interface UserMetrics {
+  id: string;
+  name: string;
+  email: string;
+  ecoScore: number;
+  currentStreak: number;
+  totalCarbonSaved: number;
+  totalRupeesSaved: number;
+  ecoPoints: number;
+  avatarUrl: string;
+  createdAt?: string;
+}
+
+export interface ChartPoint {
+  date: string;
+  co2: number;
+  cost: number;
+  saved: number;
+}
+
+export interface ActivityEntry {
+  _id: string;
+  category: 'Browser' | 'Hardware' | 'Lifestyle';
+  actionName: string;
+  carbonImpact: number;
+  costImpact: number;
+  timestamp: string;
+}
+
+export interface DashboardMetrics {
+  user: UserMetrics;
+  chartData: ChartPoint[];
+  recentActivity: ActivityEntry[];
+}
+
+export interface LeaderboardEntry {
+  id: string;
+  rank: number;
+  name: string;
+  score: number;
+  streak: number;
+  carbonSaved: number;
+  avatar: string;
+  isCurrentUser?: boolean;
+}
+
+export interface Suggestion {
+  id: string;
+  text: string;
+  potentialSavingsKg: number;
+  potentialSavingsInr: number;
+  category: 'Browser' | 'Hardware' | 'Lifestyle';
+  status: 'pending' | 'completed' | 'ignored';
+  createdAt: string;
+}
+
+export interface GlobalStats {
+  totalUsers: number;
+  totalCarbonSavedKg: number;
+  totalRupeesSaved: number;
+  totalActivities: number;
+  averageEcoScore: number;
+}
+
+export const persistAuth = (res: AuthResponse) => {
+  localStorage.setItem(STORAGE_TOKEN, res.token);
+  localStorage.setItem(STORAGE_USER_ID, res.user.id);
+  localStorage.setItem(STORAGE_USER_NAME, res.user.name);
+  localStorage.setItem(STORAGE_USER_EMAIL, res.user.email);
+};
+
+export const clearAuth = () => {
+  localStorage.removeItem(STORAGE_TOKEN);
+  localStorage.removeItem(STORAGE_USER_ID);
+  localStorage.removeItem(STORAGE_USER_NAME);
+  localStorage.removeItem(STORAGE_USER_EMAIL);
 };
 
 export const api = {
   auth: {
-    login: async (email: string, password: string) => {
-      return apiFetch<any>('/auth/login', {
+    login: (email: string, password: string) =>
+      request<AuthResponse>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password })
-      });
-    },
-    signup: async (name: string, email: string, password: string) => {
-      return apiFetch<any>('/auth/signup', {
+      }),
+    signup: (name: string, email: string, password: string) =>
+      request<AuthResponse>('/auth/signup', {
         method: 'POST',
         body: JSON.stringify({ name, email, password })
-      });
-    }
+      }),
+    me: () => request<UserMetrics>('/auth/me'),
+    updateProfile: (data: { name?: string; avatarUrl?: string }) =>
+      request<UserMetrics>('/auth/profile', {
+        method: 'PATCH',
+        body: JSON.stringify(data)
+      }),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      request<{ success: boolean }>('/auth/password', {
+        method: 'PATCH',
+        body: JSON.stringify({ currentPassword, newPassword })
+      }),
+    deleteAccount: () =>
+      request<{ success: boolean }>('/auth/account', { method: 'DELETE' })
   },
+
   dashboard: {
-    /**
-     * Fetch unified dashboard metrics (user, chart data, activity log)
-     */
-    getMetrics: async (period = 'monthly') => {
-      // Try seeding first to ensure demo user exists
-      const userId = getDemoUserId();
-      
-      const data = await apiFetch<any>(
-        `/dashboard/metrics?userId=${userId}&period=${period}`,
-        {},
-        {
-          user: MOCK_USER,
-          chartData: MOCK_CHART_DATA,
-          recentActivity: MOCK_ACTIVITY_LOG
-        }
-      );
+    getMetrics: (period: 'weekly' | 'monthly' | 'yearly' = 'monthly') =>
+      request<DashboardMetrics>(`/dashboard/metrics?period=${period}`),
+    getLeaderboard: () =>
+      request<{ data: LeaderboardEntry[] }>('/dashboard/leaderboard').then((r) => r.data),
+    getActivity: (limit = 50) =>
+      request<{ data: ActivityEntry[] }>(`/dashboard/activity?limit=${limit}`).then((r) => r.data)
+  },
 
-      // Save userId from server for future requests
-      if (data?.user?.id && !getDemoUserId()) {
-        setDemoUserId(data.user.id);
-      }
-
-      return data;
-    },
-
-    /**
-     * Fetch leaderboard (top 10 by EcoScore)
-     */
-    getLeaderboard: async () => {
-      const data = await apiFetch<{ data: any[] }>(
-        '/dashboard/leaderboard',
-        {},
-        { data: MOCK_LEADERBOARD }
-      );
-      return data.data || data;
-    },
-
-    /**
-     * Seed demo data (called on first load)
-     */
-    seed: async () => {
-      try {
-        const data = await apiFetch<any>('/dashboard/seed', {});
-        if (data?.userId) setDemoUserId(data.userId);
-        return data;
-      } catch {
-        // Silent fail – seed is optional
-      }
-    }
+  stats: {
+    global: () => request<GlobalStats>('/stats/global')
   },
 
   suggestions: {
-    /**
-     * Get daily AI-generated suggestions
-     */
-    getDaily: async () => {
-      const userId = getDemoUserId();
-      const data = await apiFetch<any[]>(
-        `/suggestions?userId=${userId}`,
-        {},
-        MOCK_SUGGESTIONS.map(s => ({ ...s, id: s.id, text: s.text }))
-      );
-      return Array.isArray(data) ? data : MOCK_SUGGESTIONS;
-    },
-
-    /**
-     * Accept or dismiss a suggestion
-     */
-    actionSuggestion: async (id: string, action: 'accept' | 'dismiss') => {
-      return apiFetch<any>(
-        `/suggestions/${id}`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({ action })
-        },
-        { success: true, id, action }
-      );
-    },
-
-    /**
-     * Manually regenerate AI suggestions
-     */
-    generate: async () => {
-      const userId = getDemoUserId();
-      return apiFetch<any>(
+    getDaily: () => request<Suggestion[]>('/suggestions'),
+    actionSuggestion: (id: string, action: 'accept' | 'dismiss') =>
+      request<{ success: boolean; updatedUser?: UserMetrics }>(`/suggestions/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ action })
+      }),
+    generate: () =>
+      request<{ success: boolean; count: number; suggestions: Suggestion[] }>(
         '/suggestions/generate',
-        {
-          method: 'POST',
-          body: JSON.stringify({ userId })
-        }
-      );
-    }
+        { method: 'POST' }
+      )
   },
 
   simulator: {
-    /**
-     * Run what-if simulation for a single or multiple habits
-     */
-    whatIf: async (habit: string, value: number) => {
-      const data = await apiFetch<any>(
-        '/simulator/what-if',
-        {
-          method: 'POST',
-          body: JSON.stringify({ habit, value })
-        },
-        (() => {
-          // Fallback calculation matches backend logic
-          let savingsPercent = 0, carbonSavedKg = 0, rupeesSavedInr = 0;
-          switch (habit) {
-            case 'videoQuality':
-              savingsPercent = value * 0.4; carbonSavedKg = value * 0.05; rupeesSavedInr = value * 0.8; break;
-            case 'acTemp':
-              savingsPercent = value * 0.6; carbonSavedKg = value * 0.12; rupeesSavedInr = value * 1.5; break;
-            case 'zombieTabs':
-              savingsPercent = value * 0.15; carbonSavedKg = value * 0.02; rupeesSavedInr = value * 0.3; break;
-          }
-          return { savingsPercent, carbonSavedKg, rupeesSavedInr };
-        })()
-      );
-      return data;
-    }
+    whatIf: (
+      habits: Array<{ habit: string; value: number }>
+    ) =>
+      request<{
+        savingsPercent: number;
+        carbonSavedKg: number;
+        rupeesSavedInr: number;
+        annualCarbonSavedKg: number;
+        annualRupeesSavedInr: number;
+        breakdown: Record<string, any>;
+      }>('/simulator/what-if', {
+        method: 'POST',
+        body: JSON.stringify({ habits })
+      })
   },
 
   chat: {
-    /**
-     * Send a message to the Groq AI Eco-Coach
-     */
-    sendMessage: async (message: string, history: Array<{role: string, content: string}> = []) => {
-      const userId = getDemoUserId();
-      const data = await apiFetch<{ text: string; timestamp: string }>(
-        '/chat',
-        {
-          method: 'POST',
-          body: JSON.stringify({ message, userId, history })
-        },
-        {
-          text: "My neural network is napping. But seriously—close 10 tabs right now. I'll be back.",
-          timestamp: new Date().toISOString()
-        }
-      );
-      return data;
-    }
+    sendMessage: (
+      message: string,
+      history: Array<{ role: string; content: string }> = []
+    ) =>
+      request<{ text: string; timestamp: string }>('/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message, history })
+      })
   },
 
   ingest: {
-    /**
-     * Send browser telemetry to the backend
-     */
-    browser: async (data: { tabCount?: number; videoHours?: number; videoQuality?: string; searchCount?: number }) => {
-      const userId = getDemoUserId();
-      return apiFetch<any>('/ingest/browser', {
-        method: 'POST',
-        body: JSON.stringify({ userId, ...data })
-      });
-    },
+    browser: (data: {
+      tabCount?: number;
+      videoHours?: number;
+      videoQuality?: string;
+      searchCount?: number;
+      emailMb?: number;
+      isDarkMode?: boolean;
+      directNavigationCount?: number;
+    }) =>
+      request<{ success: boolean; impact: any; updatedEcoScore: number }>(
+        '/ingest/browser',
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+    hardware: (data: {
+      sleepHours?: number;
+      brightnessReductionPercent?: number;
+      smartChargingEnabled?: boolean;
+      unpluggedHours?: number;
+      peripheralsDisconnected?: number;
+    }) =>
+      request<{ success: boolean; impact: any; updatedEcoScore: number }>(
+        '/ingest/hardware',
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+    lifestyle: (data: {
+      acTempIncrease?: number;
+      meatFreeDays?: number;
+      publicTransportDays?: number;
+      paperlessPages?: number;
+      deviceFreeHours?: number;
+    }) =>
+      request<{ success: boolean; impact: any; updatedEcoScore: number }>(
+        '/ingest/lifestyle',
+        { method: 'POST', body: JSON.stringify(data) }
+      )
+  },
 
-    hardware: async (data: { sleepHours?: number; brightnessReductionPercent?: number; smartChargingEnabled?: boolean }) => {
-      const userId = getDemoUserId();
-      return apiFetch<any>('/ingest/hardware', {
-        method: 'POST',
-        body: JSON.stringify({ userId, ...data })
-      });
-    },
-
-    lifestyle: async (data: { acTempIncrease?: number; meatFreeDays?: number; publicTransportDays?: number }) => {
-      const userId = getDemoUserId();
-      return apiFetch<any>('/ingest/lifestyle', {
-        method: 'POST',
-        body: JSON.stringify({ userId, ...data })
-      });
-    }
-  }
+  exportEsgUrl: (format: 'csv' | 'json' = 'csv') =>
+    `${BASE_URL}/export/esg?format=${format}`
 };
+
+export const getStoredUserId = () => localStorage.getItem(STORAGE_USER_ID) || '';
+export const getStoredToken = () => localStorage.getItem(STORAGE_TOKEN) || '';
