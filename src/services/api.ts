@@ -6,9 +6,18 @@
  * No silent mock fallbacks – errors propagate so the UI can show truthful empty/error states.
  */
 
+import { withColdStartHint } from './coldStart';
+
+const isBrowserProd =
+  typeof window !== 'undefined' &&
+  window.location.hostname !== 'localhost' &&
+  window.location.hostname !== '127.0.0.1';
+
 const RAW_BASE_URL =
   (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) ||
-  'http://localhost:3001/api';
+  (isBrowserProd
+    ? 'https://carboncum.onrender.com/api'
+    : 'http://localhost:3001/api');
 
 const BASE_URL = (() => {
   const trimmed = RAW_BASE_URL.replace(/\/+$/, '');
@@ -35,35 +44,36 @@ const buildHeaders = (extra: Record<string, string> = {}): Record<string, string
   return headers;
 };
 
-const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers: buildHeaders(options.headers as Record<string, string>)
-  });
+const request = <T>(path: string, options: RequestInit = {}): Promise<T> =>
+  withColdStartHint(async () => {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      headers: buildHeaders(options.headers as Record<string, string>)
+    });
 
-  if (res.status === 401 && !path.startsWith('/auth/')) {
-    localStorage.removeItem(STORAGE_TOKEN);
-    localStorage.removeItem(STORAGE_USER_ID);
-    localStorage.removeItem(STORAGE_USER_NAME);
-    localStorage.removeItem(STORAGE_USER_EMAIL);
-    if (typeof window !== 'undefined') {
-      window.location.href = '/auth';
+    if (res.status === 401 && !path.startsWith('/auth/')) {
+      localStorage.removeItem(STORAGE_TOKEN);
+      localStorage.removeItem(STORAGE_USER_ID);
+      localStorage.removeItem(STORAGE_USER_NAME);
+      localStorage.removeItem(STORAGE_USER_EMAIL);
+      if (typeof window !== 'undefined') {
+        window.location.href = '/auth';
+      }
+      throw new ApiError('Session expired', 401);
     }
-    throw new ApiError('Session expired', 401);
-  }
 
-  const text = await res.text();
-  let body: any = null;
-  if (text) {
-    try { body = JSON.parse(text); } catch { body = text; }
-  }
+    const text = await res.text();
+    let body: any = null;
+    if (text) {
+      try { body = JSON.parse(text); } catch { body = text; }
+    }
 
-  if (!res.ok) {
-    const message = (body && body.error) || res.statusText || `HTTP ${res.status}`;
-    throw new ApiError(message, res.status);
-  }
-  return body as T;
-};
+    if (!res.ok) {
+      const message = (body && body.error) || res.statusText || `HTTP ${res.status}`;
+      throw new ApiError(message, res.status);
+    }
+    return body as T;
+  });
 
 export interface AuthResponse {
   token: string;

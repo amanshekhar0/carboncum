@@ -5,6 +5,7 @@ import { HowItWorksPage } from './pages/HowItWorksPage';
 import { EnterpriseDemoPage } from './pages/EnterpriseDemoPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AuthPage } from './pages/AuthPage';
+import { Toaster } from './components/ui/sonner';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('carbontwin_token');
@@ -30,6 +31,8 @@ export function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      {/* Global toaster so cold-start hints work on every page (including Auth) */}
+      <Toaster theme="dark" position="top-center" richColors closeButton />
     </Router>
   );
 }

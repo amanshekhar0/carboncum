@@ -18,7 +18,6 @@ import { Overview } from '../components/dashboard/Overview';
 import { WhatIfSimulator } from '../components/dashboard/WhatIfSimulator';
 import { Leaderboard } from '../components/dashboard/Leaderboard';
 import { Chatbot } from '../components/dashboard/Chatbot';
-import { Toaster } from '../components/ui/sonner';
 import { FullPageCoach } from '../components/dashboard/FullPageCoach';
 import { SettingsView } from '../components/dashboard/SettingsView';
 import { CommuteScanner } from '../components/dashboard/CommuteScanner';
@@ -188,7 +187,6 @@ function DashboardShell() {
       </main>
 
       <Chatbot />
-      <Toaster theme="dark" />
     </div>
   );
 }

@@ -9,10 +9,16 @@ import {
   getStoredToken,
   getStoredUserId
 } from './api';
+import { beginColdStartProbe } from './coldStart';
+
+const isBrowserProd =
+  typeof window !== 'undefined' &&
+  window.location.hostname !== 'localhost' &&
+  window.location.hostname !== '127.0.0.1';
 
 const SOCKET_URL =
   (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SOCKET_URL) ||
-  'http://localhost:3001';
+  (isBrowserProd ? 'https://carboncum.onrender.com' : 'http://localhost:3001');
 
 export type ChartPeriod = 'weekly' | 'monthly' | 'yearly';
 
@@ -69,6 +75,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
     socketRef.current = socket;
 
+    // Track the handshake so the cold-start toast appears if Render is asleep.
+    const endProbe = beginColdStartProbe();
+    socket.once('connect', endProbe);
+    socket.once('connect_error', endProbe);
+
     const userId = getStoredUserId();
     if (userId) {
       socket.emit('join', userId);
@@ -83,6 +94,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => {
+      endProbe();
       socket.disconnect();
       socketRef.current = null;
     };
